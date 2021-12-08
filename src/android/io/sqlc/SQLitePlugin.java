@@ -6,24 +6,20 @@
 
 package io.sqlc;
 
+import android.os.Build;
 import android.util.Log;
-
-import java.io.File;
-
-import java.lang.IllegalArgumentException;
-
-import java.util.Map;
-
-import java.util.concurrent.BlockingQueue;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.LinkedBlockingQueue;
 
 import org.apache.cordova.CallbackContext;
 import org.apache.cordova.CordovaPlugin;
-
 import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
+
+import java.io.File;
+import java.util.Map;
+import java.util.concurrent.BlockingQueue;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.LinkedBlockingQueue;
 
 public class SQLitePlugin extends CordovaPlugin {
 
@@ -194,7 +190,7 @@ public class SQLitePlugin extends CordovaPlugin {
     /**
      * Open a database.
      *
-     * @param dbName   The name of the database file
+     * @param dbname   The name of the database file
      */
     private SQLiteAndroidDatabase openDatabase(String dbname, CallbackContext cbc, boolean old_impl) throws Exception {
         try {
@@ -210,7 +206,20 @@ public class SQLitePlugin extends CordovaPlugin {
             Log.v("info", "Open sqlite db: " + dbfile.getAbsolutePath());
 
             SQLiteAndroidDatabase mydb = old_impl ? new SQLiteAndroidDatabase() : new SQLiteConnectorDatabase();
-            mydb.open(dbfile);
+            try {
+                mydb.open(dbfile);
+            } catch (Exception e) {
+                if (Build.VERSION.SDK_INT >= 30 &&
+                        mydb instanceof SQLiteConnectorDatabase &&
+                        (e instanceof NullPointerException || e instanceof java.sql.SQLException)) {
+                    Log.w(SQLitePlugin.class.getSimpleName(), "using SQLiteAndroidDatabase for android 11+");
+                    mydb = new SQLiteAndroidDatabase();
+                    mydb.open(dbfile);
+                }
+                else{
+                    throw e;
+                }
+            }
 
             if (cbc != null) // XXX Android locking/closing BUG workaround
                 cbc.success();
@@ -226,7 +235,7 @@ public class SQLitePlugin extends CordovaPlugin {
     /**
      * Close a database (in another thread).
      *
-     * @param dbName   The name of the database file
+     * @param dbname   The name of the database file
      */
     private void closeDatabase(String dbname, CallbackContext cbc) {
         DBRunner r = dbrmap.get(dbname);
@@ -286,7 +295,7 @@ public class SQLitePlugin extends CordovaPlugin {
     /**
      * Delete a database.
      *
-     * @param dbName   The name of the database file
+     * @param dbname   The name of the database file
      *
      * @return true if successful or false if an exception was encountered
      */
